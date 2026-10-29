@@ -67,6 +67,10 @@ function parseArgs(argv: readonly string[]): Args {
     'timeout',
     'delay',
   ]);
+  // Boolean options. Listed so that a misspelling is an error rather than a
+  // silently ignored flag: `--categry ipv6-ula` used to print the whole corpus
+  // and exit 0, which reads exactly like a filtered result.
+  const booleans = new Set(['json', 'yes', 'raw', 'help', 'h']);
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -77,7 +81,9 @@ function parseArgs(argv: readonly string[]): Args {
     const name = arg.replace(/^--?/, '');
     const eq = name.indexOf('=');
     if (eq !== -1) {
-      push(values, name.slice(0, eq), name.slice(eq + 1));
+      const key = name.slice(0, eq);
+      if (!withValue.has(key)) fail(unknownOption(key));
+      push(values, key, name.slice(eq + 1));
       continue;
     }
     if (withValue.has(name)) {
@@ -87,9 +93,32 @@ function parseArgs(argv: readonly string[]): Args {
       i++;
       continue;
     }
+    if (!booleans.has(name)) fail(unknownOption(name));
     flags.add(name);
   }
   return { positional, values, flags };
+}
+
+/** Every option this CLI knows, for the unknown-option message. */
+const KNOWN_OPTIONS: readonly string[] = [
+  'category',
+  'expect',
+  'target',
+  'block-on',
+  'method',
+  'header',
+  'timeout',
+  'delay',
+  'json',
+  'yes',
+  'raw',
+  'help',
+];
+
+function unknownOption(name: string): string {
+  const near = KNOWN_OPTIONS.filter((known) => known.startsWith(name.slice(0, 3)) || name.startsWith(known.slice(0, 3)));
+  const hint = near.length > 0 ? ` (did you mean ${near.map((n) => `--${n}`).join(' or ')}?)` : '';
+  return `unknown option --${name}${hint}`;
 }
 
 function push(map: Map<string, string[]>, key: string, value: string): void {
@@ -236,14 +265,21 @@ function parseBlockRule(raw: string | undefined): BlockRule {
   const rule = raw ?? 'status';
   if (rule === 'status') return (status) => status >= 400;
   if (rule.startsWith('status:')) {
-    const codes = new Set(
-      rule
-        .slice('status:'.length)
-        .split(',')
-        .map((c) => Number(c.trim())),
-    );
-    for (const code of codes) {
-      if (!Number.isInteger(code)) fail(`--block-on status: expects a comma-separated list of status codes`);
+    const segments = rule.slice('status:'.length).split(',');
+    const codes = new Set<number>();
+    for (const segment of segments) {
+      const text = segment.trim();
+      // An empty segment must not become 0. Number('') is 0, and 0 is an
+      // integer, so `--block-on status:` built a rule matching nothing and
+      // every blocking entry was then reported as a bypass.
+      if (text === '') {
+        fail('--block-on status: expects a comma-separated list of status codes, with no empty entries');
+      }
+      const code = Number(text);
+      if (!Number.isInteger(code) || code < 100 || code > 599) {
+        fail(`--block-on status: ${text} is not an HTTP status code (100-599)`);
+      }
+      codes.add(code);
     }
     return (status) => codes.has(status);
   }
