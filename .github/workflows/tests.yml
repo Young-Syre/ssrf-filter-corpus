@@ -1,0 +1,96 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+      - name: The reference filter scores 100% of what is scorable offline
+        # passed must equal scored, not total. The nine unscored entries are the
+        # needs-resolution cases -- hosts whose verdict genuinely depends on a
+        # DNS answer, which this suite does not have and must not go and get.
+        # Asserting against total would make the job demand a wrong answer.
+        run: |
+          node dist/src/cli.js self-test --json > self-test.json
+          node -e '
+            const r = require("./self-test.json");
+            if (!r.scored) { console.error("self-test scored nothing"); process.exit(1); }
+            if (r.passed !== r.scored) {
+              console.error(`scored ${r.scored}, passed ${r.passed}`);
+              console.error(`bypasses: ${JSON.stringify(r.bypasses)}`);
+              console.error(`over-blocks: ${JSON.stringify(r.overBlocks)}`);
+              process.exit(1);
+            }
+            if (r.scored + r.skipped !== r.total) {
+              console.error(`${r.scored} + ${r.skipped} != ${r.total}`);
+              process.exit(1);
+            }
+            if (r.errors.length) {
+              console.error(`errors: ${JSON.stringify(r.errors)}`);
+              process.exit(1);
+            }
+            console.log(`${r.passed}/${r.scored} scored, ${r.skipped} deferred to DNS`);
+          '
+
+      - name: Every category is non-empty and the counts add up
+        run: |
+          node dist/src/cli.js categories
+          node dist/src/cli.js list --json > corpus.json
+          node -e '
+            const all = require("./corpus.json");
+            const entries = Array.isArray(all) ? all : all.entries;
+            if (!entries || entries.length < 50) {
+              console.error(`corpus has ${entries ? entries.length : 0} entries`);
+              process.exit(1);
+            }
+            const missing = entries.filter((e) => !e.category || !e.expect);
+            if (missing.length) {
+              console.error(`${missing.length} entries missing category or expectation`);
+              process.exit(1);
+            }
+            console.log(`${entries.length} entries, all categorised`);
+          '
+
+      - name: probe refuses to send anything without explicit consent
+        # probe is the only subcommand that touches the network. It must not be
+        # possible to trigger it by accident, so the absence of --yes has to be
+        # a refusal rather than a prompt or a default.
+        run: |
+          if node dist/src/cli.js probe --target 'http://127.0.0.1:1/{{URL}}'; then
+            echo "probe ran without --yes"
+            exit 1
+          fi
+          echo "probe refused without --yes, as documented"
+
+      - name: No network code on the analysis path
+        # list/self-test/categories are offline by construction. Only the probe
+        # module is allowed to import an HTTP client.
+        run: |
+          set -e
+          ! grep -rlE "require\(['\"](http|https|net|dns|tls)|from ['\"]node:(http|https|net|dns|tls)" src/ \
+            | grep -v probe
+          echo "no HTTP or DNS import outside the probe module"
