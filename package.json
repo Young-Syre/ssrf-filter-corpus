@@ -1,0 +1,45 @@
+{
+  "name": "ssrf-filter-corpus",
+  "version": "0.1.0",
+  "description": "A verified test corpus and harness for SSRF allow/deny filters, built around what the WHATWG URL parser normalises before your filter ever runs.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./corpus": {
+      "types": "./dist/src/corpus.d.ts",
+      "default": "./dist/src/corpus.js"
+    }
+  },
+  "bin": {
+    "ssrf-corpus": "./dist/src/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ssrf",
+    "security",
+    "url",
+    "appsec",
+    "test-corpus",
+    "whatwg-url"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "22.7.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
