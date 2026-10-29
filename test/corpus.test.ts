@@ -99,9 +99,14 @@ test('the IPv6 categories each contain at least one case a textual filter misses
     const entries = byCategory(category).filter((e) => e.expect === 'block');
     assert.ok(entries.length > 0, `${category} has no blocking cases`);
     for (const entry of entries) {
+      // Assert the host is recorded before asserting what it is not:
+      // `!undefined?.includes(x)` is true, so an entry with no recorded host
+      // passed this test without being checked.
+      assert.notEqual(entry.normalisedHost, undefined, `${entry.id}: no normalisedHost recorded`);
+      const host = entry.normalisedHost!;
       assert.ok(
-        !entry.normalisedHost?.includes('127.') && !entry.normalisedHost?.includes('169.254'),
-        `${entry.id}: normalises to ${entry.normalisedHost}, which a grep would still catch`,
+        !host.includes('127.') && !host.includes('169.254'),
+        `${entry.id}: normalises to ${host}, which a grep would still catch`,
       );
     }
   }

@@ -33,9 +33,9 @@ test('the reference implementation scores 100% with no bypasses or over-blocks',
   assert.equal(report.deferredBlocked, 0, 'it defers rather than blocking undecidable names');
 });
 
-test('the naive string filter is caught, with 69 bypasses', async () => {
+test('the naive string filter is caught, with 73 bypasses', async () => {
   const report = await runCorpus(naiveFilter);
-  assert.equal(report.bypasses.length, 69);
+  assert.equal(report.bypasses.length, 73);
   assert.equal(report.overBlocks.length, 0, 'it is too narrow to over-block a public literal');
 
   const bypassed = new Set(report.bypasses.map((r) => r.entry.id));
@@ -167,7 +167,7 @@ test('formatReport prints the counts and names the bypassed entries', async () =
   const report = await runCorpus(naiveFilter);
   const text = formatReport(report, 'naive filter');
   assert.match(text, /naive filter/);
-  assert.match(text, /69 bypasses/);
+  assert.match(text, /73 bypasses/);
   assert.match(text, /BYPASSES/);
   assert.match(text, /ipv6-v4mapped-loopback/);
   assert.ok(!text.includes('OVER-BLOCKS'), 'no over-blocks, so no over-block section');

@@ -33,6 +33,8 @@ export interface NormalisedHost {
   /** Hostname exactly as the WHATWG parser produced it, brackets stripped for IPv6. */
   host: string;
   kind: HostKind;
+  /** The URL's scheme, lowercased and without the colon. */
+  scheme: string;
   /**
    * Dotted-decimal IPv4 this host ultimately designates, if any — either because it
    * *is* IPv4, or because it is an IPv6 address with an embedded IPv4 (v4-mapped,
@@ -52,19 +54,20 @@ export function normaliseHost(input: string): NormalisedHost | null {
     return null;
   }
   let host = url.hostname;
+  const scheme = url.protocol.replace(/:$/, '').toLowerCase();
   if (host.startsWith('[') && host.endsWith(']')) {
     host = host.slice(1, -1);
   }
   if (host.includes(':')) {
     const embedded = extractEmbeddedIPv4(host);
     return embedded
-      ? { host, kind: 'ipv6', effectiveIPv4: embedded.address, via: embedded.via }
-      : { host, kind: 'ipv6' };
+      ? { host, scheme, kind: 'ipv6', effectiveIPv4: embedded.address, via: embedded.via }
+      : { host, scheme, kind: 'ipv6' };
   }
   if (isDottedQuad(host)) {
-    return { host, kind: 'ipv4', effectiveIPv4: host, via: 'literal' };
+    return { host, scheme, kind: 'ipv4', effectiveIPv4: host, via: 'literal' };
   }
-  return { host, kind: 'domain' };
+  return { host, scheme, kind: 'domain' };
 }
 
 /** True for a well-formed dotted-decimal IPv4 string with four octets in range. */

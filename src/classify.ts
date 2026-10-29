@@ -33,6 +33,8 @@ export type BlockCategory =
   | 'ipv6-multicast'
   | 'ipv6-reserved'
   | 'dangerous-name'
+  | 'unsupported-scheme'
+  | 'no-host'
   | 'unparseable';
 
 export interface BlockVerdict {
@@ -196,6 +198,18 @@ export const DANGEROUS_NAMES: readonly string[] = [
 export const DANGEROUS_SUFFIXES: readonly string[] = ['.localhost', '.internal'];
 
 /**
+ * The only schemes a destination filter for an HTTP fetcher should pass.
+ *
+ * Everything else is refused by name rather than by host, because the host is
+ * the wrong question for them: `file:///etc/passwd` has no host at all, and
+ * `gopher://` and `dict://` are useful to an attacker precisely because the
+ * client will write attacker-chosen bytes to an arbitrary port. A fetcher that
+ * follows redirects has to re-run this check on every hop, since the scheme can
+ * change mid-chain.
+ */
+export const ALLOWED_SCHEMES: readonly string[] = ['http', 'https'];
+
+/**
  * Classify a target URL for a lexical SSRF filter.
  *
  * @param url Raw, untrusted input — exactly as it arrived from the user.
@@ -209,6 +223,13 @@ export function classifyTarget(url: string): Verdict {
       category: 'unparseable',
     };
   }
+  if (!ALLOWED_SCHEMES.includes(parsed.scheme)) {
+    return {
+      verdict: 'block',
+      reason: `${parsed.scheme}: is not ${ALLOWED_SCHEMES.join(' or ')}, so the host is the wrong question`,
+      category: 'unsupported-scheme',
+    };
+  }
   return classifyHost(parsed);
 }
 
@@ -218,6 +239,18 @@ export function classifyHost(parsed: NormalisedHost): Verdict {
   // dot on a name: `169.254.169.254..` survives as a domain and slips past any
   // range check. Strip the root label(s) and re-test before anything else.
   const host = parsed.host.replace(/\.+$/, '');
+
+  // No host at all. This used to fall through to the domain branch and return
+  // needs-resolution with an empty host, which referenceFilter reads as "not
+  // blocked" -- so `file:///etc/passwd` was allowed. There is nothing to
+  // resolve, so there is nothing a resolver could rule on later.
+  if (host === '') {
+    return {
+      verdict: 'block',
+      reason: `${parsed.scheme}: carries no host, so there is nothing to resolve or pin`,
+      category: 'no-host',
+    };
+  }
 
   const embedded = parsed.effectiveIPv4;
   if (embedded) {

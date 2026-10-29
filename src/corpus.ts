@@ -36,6 +36,7 @@ export const CATEGORIES = [
   'trailing-dot',
   'rebinding',
   'public-allow',
+  'scheme',
   'malformed',
 ] as const;
 
@@ -975,6 +976,59 @@ export const CORPUS: readonly CorpusEntry[] = [
     expect: 'needs-resolution',
     normalisedHost: 'api.github.com',
     rationale: 'The ordinary case an SSRF filter exists to permit, and still a name: it has to be resolved before it can be cleared.',
+  },
+
+  // ── Schemes that are not http(s) ──────────────────────────────────────────
+  // The host is the wrong question for these. Two of them have no host at all,
+  // and the rest are useful precisely because of what the client does with the
+  // connection rather than where it points.
+  {
+    id: 'scheme-file-etc-passwd',
+    input: 'file:///etc/passwd',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: '',
+    rationale: 'No host at all, so a host-based filter has nothing to test and the usual mistake is to pass it through as unresolvable. The fetcher reads a local file.',
+  },
+  {
+    id: 'scheme-file-unc-path',
+    input: 'file://attacker.example/share/payload',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: 'attacker.example',
+    rationale: 'A file: URL with an authority. On Windows this is an SMB fetch, which leaks NTLM credentials to the host named; the hostname itself is unremarkable.',
+  },
+  {
+    id: 'scheme-gopher-smuggled-request',
+    input: 'gopher://attacker.example:6379/_SET%20key%20value',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: 'attacker.example',
+    rationale: 'gopher: lets the caller choose the bytes written to an arbitrary port, which is how an SSRF becomes a write to Redis or an SMTP send. The host is public and the port is not the point.',
+  },
+  {
+    id: 'scheme-dict-memcached',
+    input: 'dict://127.0.0.1:11211/stats',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: '127.0.0.1',
+    rationale: 'Blocked twice over: loopback, and a scheme that speaks to memcached. Here to show the scheme check firing before the address check, so a public-hosted dict: URL is refused too.',
+  },
+  {
+    id: 'scheme-data-url',
+    input: 'data:text/html;base64,PHNjcmlwdD4xPC9zY3JpcHQ+',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: '',
+    rationale: 'No host. Harmless to a fetcher that refuses it and a stored-XSS or parser-confusion primitive for one that hands the bytes to a renderer.',
+  },
+  {
+    id: 'scheme-ftp-loopback',
+    input: 'ftp://127.0.0.1/',
+    category: 'scheme',
+    expect: 'block',
+    normalisedHost: '127.0.0.1',
+    rationale: 'A scheme many HTTP clients still support, including libcurl by default. The address check would catch this one; the scheme check catches the version pointed at a public host.',
   },
 
   // ── Input that does not parse ─────────────────────────────────────────────

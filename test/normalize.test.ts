@@ -82,21 +82,34 @@ test('extractEmbeddedIPv4 declines addresses with no embedded IPv4', () => {
   assert.equal(extractEmbeddedIPv4('not-an-address'), null);
 });
 
-test('normaliseHost reports the parser output, kind, and effective IPv4', () => {
+test('normaliseHost reports the parser output, scheme, kind, and effective IPv4', () => {
   assert.deepEqual(normaliseHost('http://2130706433/'), {
     host: '127.0.0.1',
+    scheme: 'http',
     kind: 'ipv4',
     effectiveIPv4: '127.0.0.1',
     via: 'literal',
   });
   assert.deepEqual(normaliseHost('http://[::ffff:127.0.0.1]/'), {
     host: '::ffff:7f00:1',
+    scheme: 'http',
     kind: 'ipv6',
     effectiveIPv4: '127.0.0.1',
     via: 'v4-mapped',
   });
-  assert.deepEqual(normaliseHost('http://[fe80::1]/'), { host: 'fe80::1', kind: 'ipv6' });
-  assert.deepEqual(normaliseHost('http://example.com/'), { host: 'example.com', kind: 'domain' });
+  assert.deepEqual(normaliseHost('http://[fe80::1]/'), { host: 'fe80::1', scheme: 'http', kind: 'ipv6' });
+  assert.deepEqual(normaliseHost('http://example.com/'), {
+    host: 'example.com',
+    scheme: 'http',
+    kind: 'domain',
+  });
+});
+
+test('normaliseHost reports the scheme of a URL that carries no host', () => {
+  // The scheme is what decides these, since there is no host to decide on.
+  assert.deepEqual(normaliseHost('file:///etc/passwd'), { host: '', scheme: 'file', kind: 'domain' });
+  assert.equal(normaliseHost('data:text/plain,x')?.scheme, 'data');
+  assert.equal(normaliseHost('HTTPS://example.com/')?.scheme, 'https', 'lowercased');
 });
 
 test('normaliseHost strips userinfo and brackets, and returns null on unparseable input', () => {
