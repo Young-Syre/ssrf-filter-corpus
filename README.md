@@ -5,7 +5,7 @@
 [![dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](./package.json)
 [![tests](https://github.com/Young-Syre/ssrf-filter-corpus/actions/workflows/tests.yml/badge.svg)](https://github.com/Young-Syre/ssrf-filter-corpus/actions/workflows/tests.yml)
 
-A test corpus and scoring harness for SSRF destination filters. 111 entries, every
+A test corpus and scoring harness for SSRF destination filters. 117 entries, every
 one a real address form, with the host each one normalises to **verified against
 `new URL()` at test time** rather than asserted from memory.
 
@@ -53,7 +53,7 @@ stops every loopback and localhost row above, obfuscated or not.
 
 ## Where filters actually fail
 
-The same filter misses 69 of the 90 blocking entries in this corpus. Here is the
+The same filter misses 73 of the 96 blocking entries in this corpus. Here is the
 shape of it:
 
 ```js
@@ -148,7 +148,7 @@ a deny-by-default allowlist from a lexical blocklist.
 
 ## Categories
 
-111 entries: 90 expect `block`, 12 expect `allow`, 9 expect `needs-resolution`.
+117 entries: 96 expect `block`, 12 expect `allow`, 9 expect `needs-resolution`.
 
 | Category | n | block | allow | needs-resolution |
 | --- | --- | --- | --- | --- |
@@ -176,6 +176,7 @@ a deny-by-default allowlist from a lexical blocklist.
 | `trailing-dot` | 5 | 5 | 0 | 0 |
 | `rebinding` | 4 | 0 | 0 | 4 |
 | `public-allow` | 8 | 0 | 7 | 1 |
+| `scheme` | 6 | 6 | 0 | 0 |
 | `malformed` | 2 | 2 | 0 | 0 |
 
 <details>
@@ -196,6 +197,16 @@ regex that reads up to the `@` gets the opposite answer.
 really *is* userinfo, because a percent-encoded slash does not terminate the
 authority. Blocking this one is an over-block. These two inputs differ by one
 character and must be decided differently; only a conformant parser gets both right.
+
+**`file:///etc/passwd`** → host `''` — the host is the wrong question. A filter that
+reaches for the hostname finds an empty string, and an empty string is neither a
+blocked range nor a resolvable name, so the usual outcome is "cannot decide, pass it
+on". The scheme is what decides this one, which is why the reference filter gates on
+`http`/`https` before it looks at the host at all. `gopher://` and `dict://` are the
+same decision for the opposite reason: their hosts are often perfectly ordinary, and
+what makes them useful to an attacker is that the client writes caller-chosen bytes
+to a caller-chosen port. A fetcher that follows redirects has to re-run the scheme
+check on every hop, because the scheme can change mid-chain.
 
 **`http://100.100.100.200/latest/meta-data/`** — Alibaba Cloud instance metadata, in
 carrier-grade NAT space (RFC 6598). Blocklists built from RFC 1918 plus loopback plus
